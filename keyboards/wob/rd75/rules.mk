@@ -1,16 +1,21 @@
+# LIB_NAME = rdmctmzt_common.c
+# LIBS += -L$(TOP_DIR)/keyboards/wob/common -l:librdmctmztcommon.a
+# LDFLAGS += -L$(TOP_DIR)/keyboards/wob/common -l:$(LIB_NAME)
+
 VPATH += keyboards/wob/common
-SRC += rdmctmzt_common.c
-SRC += quantum/dynamic_keymap.c
-SRC += three_mode.c
-SRC += user_battery.c
-SRC += user_eeprom.c
-SRC += user_emi.c
-SRC += user_led_custom.c
-SRC += user_spi.c
-SRC += user_system.c
+# SRC += librdmctmztcommon.a
+# SRC += quantum/dynamic_keymap.c
+# SRC += three_mode.c
+# SRC += user_battery.c
+# SRC += user_eeprom.c
+# SRC += user_emi.c
+# SRC += user_led_custom.c
+# SRC += user_spi.c
+# SRC += user_system.c
+
 
 VPATH += lib/chibios-contrib/os/common/ext/CMSIS/ES32/FS026/md
-# SRC += lib/chibios-contrib/os/common/ext/CMSIS/ES32/FS026/md/md_adc.c
+# # SRC += lib/chibios-contrib/os/common/ext/CMSIS/ES32/FS026/md/md_adc.c
 SRC += lib/chibios-contrib/os/common/ext/CMSIS/ES32/FS026/md/md_spi.c
 
 # Board: it should exist either in <chibios>/os/hal/boards/
@@ -40,7 +45,9 @@ MCU_LDSCRIPT ?= FS026
 #  - it should exist in <chibios>/os/common/startup/ARMCMx/compilers/GCC/mk/
 MCU_STARTUP ?= FS026
 
-EEPROM_DRIVER = custom
+USE_FPU ?= no
+
+# EEPROM_DRIVER = custom
 EEPROM_CUSTOM = custom
 NO_USB_STARTUP_CHECK = yes
 BLUETOOTH_CUSTOM = yes

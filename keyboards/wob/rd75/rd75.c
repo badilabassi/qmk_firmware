@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "rdmctmzt_common.h"
 
 void matrix_io_delay(void) {
@@ -59,17 +60,17 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
     return false;
 }
 
-// void notify_usb_device_state_change_user(enum usb_device_state usb_device_state)  {
-//     if (Keyboard_Info.Key_Mode == QMK_USB_MODE) {
-//         if(usb_device_state == USB_DEVICE_STATE_CONFIGURED) {
-//             Usb_If_Ok_Led = true;
-//         } else {
-//             Usb_If_Ok_Led = false;
-//         }
-//     } else {
-//         Usb_If_Ok_Led = false;
-//     }
-// }
+void notify_usb_device_state_change_user(struct usb_device_state usb_device_state)  {
+    if (Keyboard_Info.Key_Mode == QMK_USB_MODE) {
+        if(usb_device_state.configure_state == USB_DEVICE_STATE_CONFIGURED) {
+            Usb_If_Ok_Led = true;
+        } else {
+            Usb_If_Ok_Led = false;
+        }
+    } else {
+        Usb_If_Ok_Led = false;
+    }
+}
 
 void housekeeping_task_user(void) {
     if (Keyboard_Reset) {

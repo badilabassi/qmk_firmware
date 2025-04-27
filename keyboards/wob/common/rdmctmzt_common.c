@@ -15,8 +15,29 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+
 #include "rdmctmzt_common.h"
 
+// Port definitions
+// #define PORT_A GPIOA
+// #define PORT_B GPIOB
+// #define PORT_C GPIOC
+// #define PORT_D GPIOD
+
+// Pin to port mapping for QMK pin_t format
+// static GPIO_TypeDef *pin_to_port(pin_t pin) {
+//     switch (pin / 16) {
+//         case 0: return PORT_A;
+//         case 1: return PORT_B;
+//         case 2: return PORT_C;
+//         case 3: return PORT_D;
+//         default: return PORT_A; // Fallback
+//     }
+// }
+
+#define PIN_NUM(pin) ((pin) % 16)
+
+// Global variables
 Keyboard_Info_t Keyboard_Info = {
     .Key_Mode = INIT_WORK_MODE,
     .Ble_Channel = INIT_BLE_CHANNEL,
@@ -24,6 +45,14 @@ Keyboard_Info_t Keyboard_Info = {
     .Nkro = INIT_ALL_SIX_KEY,
     .Mac_Win_Mode = INIT_WIN_MAC_MODE,
     .Win_Lock = INIT_WIN_LOCK_NLOCK,
+#if LOGO_LED_ENABLE
+    .Logo_On_Off = INIT_LOGO_ON_OFF,
+    .Logo_Mode = INIT_LOGO_MODE,
+    .Logo_Colour = INIT_LOGO_COLOUR,
+    .Logo_Saturation = INIT_LOGO_SATURATION,
+    .Logo_Brightness = INIT_LOGO_BRIGHTNESS,
+    .Logo_Speed = INIT_LOGO_SPEED,
+#endif
 };
 
 Keyboard_Status_t Keyboard_Status = {
@@ -487,7 +516,10 @@ void es_change_qmk_nkro_mode_disable(void) {
 // Example implementation of User_Led_Show
 void User_Led_Show(void) {
     // Implement your LED show logic here
-    rgb_matrix_driver.init();
+    // rgb_matrix_driver.init();
+    rgb_matrix_driver_flush();
+    rgb_matrix_driver_init();
+    rgb_matrix_mode(RGB_MATRIX_CYCLE_LEFT_RIGHT);
 }
 
 // Example implementation of User_Keyboard_Reset
@@ -507,9 +539,15 @@ void User_Keyboard_Post_Init(void) {
     layer_state_set_user(0);
 }
 
-// Example implementation of Logo_Init
+#if LOGO_LED_ENABLE
 void Logo_Init(void) {
     // Implement your logo initialization logic here
     // Example: Set a specific RGB color for the logo
-    rgb_matrix_set_color_all(0xFF, 0x00, 0x00); // Red color
+    rgb_matrix_mode(RGB_MATRIX_CYCLE_LEFT_RIGHT);
+    // rgb_matrix_set_color_all(0xFF, 0x00, 0x00); // Red color
 }
+void Logo_Mode_Show(void) {}
+void User_Via_Qmk_Logo_Get_Value(uint8_t *data) {}
+void User_Via_Qmk_Logo_Set_Value(uint8_t *data) {}
+void User_Via_Qmk_Logo_Command(uint8_t *data, uint8_t length) {}
+#endif

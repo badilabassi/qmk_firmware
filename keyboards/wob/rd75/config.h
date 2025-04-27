@@ -16,7 +16,6 @@
  */
 #pragma once
 
-
 /* Mechanical locking support. Use KC_LCAP, KC_LNUM or KC_LSCR instead in keymap */
 #define LOCKING_SUPPORT_ENABLE
 /* Locking resynchronize hack */
@@ -69,7 +68,3 @@
 #define RGB_MATRIX_LED_FLUSH_LIMIT 16
 #define RGB_MATRIX_MAXIMUM_BRIGHTNESS 160
 #define RGB_MATRIX_SLEEP
-
-
-#define DYNAMIC_KEYMAP_EEPROM_MAX_ADDR  1151
-#define EEPROM_SIZE 1152
