@@ -95,12 +95,12 @@ void keyboard_post_init_kb(void) {
     keyboard_post_init_user();
 }
 
-bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要有按键按下就会调用此函数*/
+bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   // Called for every key press and release
     if (!process_record_user(keycode, record)) {
         return false;
     }
 
-    Usb_Change_Mode_Delay = 0;                                      /*只要有按键就不会进入休眠*/
+    Usb_Change_Mode_Delay = 0;                                      // Any key activity postpones sleep
     Usb_Change_Mode_Wakeup = false;
 
     if (Test_Led) {
@@ -114,9 +114,9 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
             if (record->event.pressed) {
                 Key_2p4g_Status = true;
                 Usb_Disconnect();
-                if (Keyboard_Info.Key_Mode != QMK_2P4G_MODE) {      /*如果当前模式不是2.4G模式则切换为2.4G*/
+                if (Keyboard_Info.Key_Mode != QMK_2P4G_MODE) {      // Switch to 2.4G if not already in it
                     Keyboard_Info.Key_Mode = QMK_2P4G_MODE;
-                    Spi_Send_Command(USER_SWITCH_2P4G_MODE);         /*发送SPI命令*/
+                    Spi_Send_Command(USER_SWITCH_2P4G_MODE);         // Tell the radio
                     Save_Flash_Set();
                     Led_Rf_Pair_Flg = true;
                 }
@@ -129,10 +129,10 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
             if (record->event.pressed) {
                 Key_Ble_1_Status = true;
                 Usb_Disconnect();
-                if ((Keyboard_Info.Key_Mode != QMK_BLE_MODE) || ((Keyboard_Info.Key_Mode == QMK_BLE_MODE) && (Keyboard_Info.Ble_Channel != QMK_BLE_CHANNEL_1))) {   /*如果当前模式不是BLE模式则切换为BLE，或者BLE通道不相同*/
+                if ((Keyboard_Info.Key_Mode != QMK_BLE_MODE) || ((Keyboard_Info.Key_Mode == QMK_BLE_MODE) && (Keyboard_Info.Ble_Channel != QMK_BLE_CHANNEL_1))) {   // Switch to BLE if in another mode or on another channel
                     Keyboard_Info.Key_Mode = QMK_BLE_MODE;
                     Keyboard_Info.Ble_Channel = QMK_BLE_CHANNEL_1;
-                    Spi_Send_Command(USER_SWITCH_BLE_1_MODE);        /*发送SPI命令*/
+                    Spi_Send_Command(USER_SWITCH_BLE_1_MODE);        // Tell the radio
                     Save_Flash_Set();
                     Led_Rf_Pair_Flg = true;
                 }
@@ -145,10 +145,10 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
             if (record->event.pressed) {
                 Key_Ble_2_Status = true;
                 Usb_Disconnect();
-                if ((Keyboard_Info.Key_Mode != QMK_BLE_MODE) || ((Keyboard_Info.Key_Mode == QMK_BLE_MODE) && (Keyboard_Info.Ble_Channel != QMK_BLE_CHANNEL_2))) {   /*如果当前模式不是BLE模式则切换为BLE，或者BLE通道不相同*/
+                if ((Keyboard_Info.Key_Mode != QMK_BLE_MODE) || ((Keyboard_Info.Key_Mode == QMK_BLE_MODE) && (Keyboard_Info.Ble_Channel != QMK_BLE_CHANNEL_2))) {   // Switch to BLE if in another mode or on another channel
                     Keyboard_Info.Key_Mode = QMK_BLE_MODE;
                     Keyboard_Info.Ble_Channel = QMK_BLE_CHANNEL_2;
-                    Spi_Send_Command(USER_SWITCH_BLE_2_MODE);        /*发送SPI命令*/
+                    Spi_Send_Command(USER_SWITCH_BLE_2_MODE);        // Tell the radio
                     Save_Flash_Set();
                     Led_Rf_Pair_Flg = true;
                 }
@@ -161,10 +161,10 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
             if (record->event.pressed) {
                 Key_Ble_3_Status = true;
                 Usb_Disconnect();
-                if ((Keyboard_Info.Key_Mode != QMK_BLE_MODE) || ((Keyboard_Info.Key_Mode == QMK_BLE_MODE) && (Keyboard_Info.Ble_Channel != QMK_BLE_CHANNEL_3))) {   /*如果当前模式不是BLE模式则切换为BLE，或者BLE通道不相同*/
+                if ((Keyboard_Info.Key_Mode != QMK_BLE_MODE) || ((Keyboard_Info.Key_Mode == QMK_BLE_MODE) && (Keyboard_Info.Ble_Channel != QMK_BLE_CHANNEL_3))) {   // Switch to BLE if in another mode or on another channel
                     Keyboard_Info.Key_Mode = QMK_BLE_MODE;
                     Keyboard_Info.Ble_Channel = QMK_BLE_CHANNEL_3;  
-                    Spi_Send_Command(USER_SWITCH_BLE_3_MODE);        /*发送SPI命令*/
+                    Spi_Send_Command(USER_SWITCH_BLE_3_MODE);        // Tell the radio
                     Save_Flash_Set();
                     Led_Rf_Pair_Flg = true;
                 }
@@ -177,14 +177,14 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
             if (record->event.pressed) {
                 if (Keyboard_Info.Key_Mode != QMK_USB_MODE) {
                     Keyboard_Info.Key_Mode = QMK_USB_MODE;
-                    Spi_Send_Command(USER_SWITCH_USB_MODE);          /*发送SPI命令*/
+                    Spi_Send_Command(USER_SWITCH_USB_MODE);          // Tell the radio
                     es_restart_usb_driver();
                     Save_Flash_Set();
                     Led_Rf_Pair_Flg = false;
                 }
             }
         } return true;
-        case QMK_BATT_NUM: {                                        //电池状态显示
+        case QMK_BATT_NUM: {                                        // Battery level display
             if (record->event.pressed) {
                 User_Key_Batt_Num_Show = true;
                 User_Key_Batt_Count = 0;
@@ -193,7 +193,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 User_Key_Batt_Count = 0;
             }
         } return true;
-        case QMK_WIN_LOCK: {                                        //锁WIN
+        case QMK_WIN_LOCK: {                                        // Win key lock
             if (!record->event.pressed) {
                 if (Keyboard_Info.Mac_Win_Mode == INIT_MAC_MODE) {
                     if (Keyboard_Info.Win_Lock == INIT_WIN_LOCK) {
@@ -211,7 +211,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 }
             }
         } return true;
-        case QMK_KB_SIX_N_CH: {                                     //六键全键无冲切换
+        case QMK_KB_SIX_N_CH: {                                     // 6KRO / NKRO toggle
             if (record->event.pressed) {
                 if(keymap_config.nkro) {
                     es_change_qmk_nkro_mode_disable();
@@ -223,7 +223,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Logo_Flash_Count = 0;
             }
         } return true;
-        case QMK_TEST_COLOUR: {                                     //键盘灯光颜色测试
+        case QMK_TEST_COLOUR: {                                     // LED colour test
             if (!record->event.pressed) {
                 if (Test_Led == false) {
                     Test_Led = true;
@@ -231,7 +231,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 }
             }
         } return true;
-        case KC_SPC: {                                              //测试灯光颜色切换
+        case KC_SPC: {                                              // Next test colour
             if (!record->event.pressed) {
                 if (Test_Led) {
                     Test_Colour++;
@@ -256,28 +256,28 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 record->event.pressed = false;
             }
         } return true;
-        case RM_VALU: {                                             //亮度加
+        case RM_VALU: {                                             // Brightness up
             if (!record->event.pressed) {
                 if (rgb_matrix_get_val() >= RGB_MATRIX_MAXIMUM_BRIGHTNESS) {
                     Led_Point_Count = 3;
                 }
             }
         } return true;
-        case RM_VALD: {                                             //亮度减
+        case RM_VALD: {                                             // Brightness down
             if (!record->event.pressed) {
                 if (rgb_matrix_get_val() <= 0) {
                     Led_Point_Count = 3;
                 }
             }
         } return true;
-        case RM_SPDU: {                                             //速度加
+        case RM_SPDU: {                                             // Speed up
             if (!record->event.pressed) {
                 if (rgb_matrix_get_speed() >= 255) {
                     Led_Point_Count = 3;
                 }
             }
         } return true;
-        case RM_SPDD: {                                             //速度减
+        case RM_SPDD: {                                             // Speed down
             if (!record->event.pressed) {
                 if (rgb_matrix_get_speed() <= 0) {
                     Led_Point_Count = 3;
@@ -321,7 +321,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 }
             }
         } return true;
-        case EE_CLR: {                                              //系统复位
+        case EE_CLR: {                                              // Factory reset (held 3 s)
             Key_Reset_Status = record->event.pressed;
             record->event.pressed = false;
             Func_Time_3s_Count = 0;
@@ -361,7 +361,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
             }
         } return true;
     #if LOGO_LED_ENABLE
-        case LOGO_TOG: {                                            //logo 灯光开关
+        case LOGO_TOG: {                                            // Logo on/off
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off) {
                     Keyboard_Info.Logo_On_Off = LOGO_LED_ON;
@@ -375,7 +375,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case LOGO_MOD: {                                            //logo 模式切换
+        case LOGO_MOD: {                                            // Logo next mode
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off) {
                     return true;
@@ -390,7 +390,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case LOGO_RMOD: {                                           //logo 模式切换
+        case LOGO_RMOD: {                                           // Logo previous mode
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off) {
                     return true;
@@ -405,7 +405,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case LOGO_HUI: {                                            //logo 颜色增加
+        case LOGO_HUI: {                                            // Logo hue up
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off || (Keyboard_Info.Logo_Mode == LOGO_OFF_MODE) || (Keyboard_Info.Logo_Mode == LOGO_WAVE_RGB_MODE) || (Keyboard_Info.Logo_Mode == LOGO_SPECTRUM_MODE)) {
                     return true;
@@ -419,7 +419,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case LOGO_HUD: {                                            //logo 颜色减小
+        case LOGO_HUD: {                                            // Logo hue down
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off || (Keyboard_Info.Logo_Mode == LOGO_OFF_MODE) || (Keyboard_Info.Logo_Mode == LOGO_WAVE_RGB_MODE) || (Keyboard_Info.Logo_Mode == LOGO_SPECTRUM_MODE)) {
                     return true;
@@ -433,7 +433,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case LOGO_SAI: {                                            //logo 饱和度增加
+        case LOGO_SAI: {                                            // Logo saturation up
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off || (Keyboard_Info.Logo_Mode == LOGO_OFF_MODE)) {
                     return true;
@@ -447,7 +447,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case LOGO_SAD: {                                            //logo 饱和度减小
+        case LOGO_SAD: {                                            // Logo saturation down
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off || (Keyboard_Info.Logo_Mode == LOGO_OFF_MODE)) {
                     return true;
@@ -461,7 +461,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case LOGO_VAI: {                                            //logo 亮度增加
+        case LOGO_VAI: {                                            // Logo brightness up
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off || (Keyboard_Info.Logo_Mode == LOGO_OFF_MODE)) {
                     return true;
@@ -477,7 +477,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case LOGO_VAD: {                                            //logo 亮度减小
+        case LOGO_VAD: {                                            // Logo brightness down
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off || (Keyboard_Info.Logo_Mode == LOGO_OFF_MODE)) {
                     return true;
@@ -493,7 +493,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case LOGO_SPI: {                                            //logo 速度增加
+        case LOGO_SPI: {                                            // Logo speed up
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off || (Keyboard_Info.Logo_Mode == LOGO_OFF_MODE)) {
                     return true;
@@ -509,7 +509,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case LOGO_SPD: {                                            //logo 速度减小
+        case LOGO_SPD: {                                            // Logo speed down
             if (!record->event.pressed) {
                 if (Keyboard_Info.Logo_On_Off || (Keyboard_Info.Logo_Mode == LOGO_OFF_MODE)) {
                     return true;
@@ -527,7 +527,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
         } return true;
     #endif
     #if SIDE_LED_ENABLE
-        case SIDE_TOG: {                                            //侧灯 灯光开关
+        case SIDE_TOG: {                                            // Side light on/off
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off) {
                     Keyboard_Info.Side_On_Off = SIDE_LED_ON;
@@ -541,7 +541,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case SIDE_MOD: {                                            //侧灯 模式切换
+        case SIDE_MOD: {                                            // Side light next mode
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off) {
                     return true;
@@ -556,7 +556,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case SIDE_RMOD: {                                           //侧灯 模式切换
+        case SIDE_RMOD: {                                           // Side light previous mode
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off) {
                     return true;
@@ -571,7 +571,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case SIDE_HUI: {                                            //侧灯 颜色增加
+        case SIDE_HUI: {                                            // Side light hue up
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off || (Keyboard_Info.Side_Mode == SIDE_OFF_MODE) || (Keyboard_Info.Side_Mode == SIDE_WAVE_RGB_MODE) || (Keyboard_Info.Side_Mode == SIDE_SPECTRUM_MODE)) {
                     return true;
@@ -585,7 +585,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case SIDE_HUD: {                                            //侧灯 颜色减小
+        case SIDE_HUD: {                                            // Side light hue down
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off || (Keyboard_Info.Side_Mode == SIDE_OFF_MODE) || (Keyboard_Info.Side_Mode == SIDE_WAVE_RGB_MODE) || (Keyboard_Info.Side_Mode == SIDE_SPECTRUM_MODE)) {
                     return true;
@@ -599,7 +599,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case SIDE_SAI: {                                            //侧灯 饱和度增加
+        case SIDE_SAI: {                                            // Side light saturation up
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off || (Keyboard_Info.Side_Mode == SIDE_OFF_MODE)) {
                     return true;
@@ -613,7 +613,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case SIDE_SAD: {                                            //侧灯 饱和度减小
+        case SIDE_SAD: {                                            // Side light saturation down
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off || (Keyboard_Info.Side_Mode == SIDE_OFF_MODE)) {
                     return true;
@@ -627,7 +627,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case SIDE_VAI: {                                            //侧灯 亮度增加
+        case SIDE_VAI: {                                            // Side light brightness up
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off || (Keyboard_Info.Side_Mode == SIDE_OFF_MODE)) {
                     return true;
@@ -642,7 +642,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case SIDE_VAD: {                                            //侧灯 亮度减小
+        case SIDE_VAD: {                                            // Side light brightness down
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off || (Keyboard_Info.Side_Mode == SIDE_OFF_MODE)) {
                     return true;
@@ -657,7 +657,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case SIDE_SPI: {                                            //侧灯 速度增加
+        case SIDE_SPI: {                                            // Side light speed up
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off || (Keyboard_Info.Side_Mode == SIDE_OFF_MODE)) {
                     return true;
@@ -672,7 +672,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 Save_Flash_Set();
             }
         } return true;
-        case SIDE_SPD: {                                            //侧灯 速度减小
+        case SIDE_SPD: {                                            // Side light speed down
             if (!record->event.pressed) {
                 if (Keyboard_Info.Side_On_Off || (Keyboard_Info.Side_Mode == SIDE_OFF_MODE)) {
                     return true;
