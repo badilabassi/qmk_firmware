@@ -27,8 +27,6 @@
 /* Ensure we jump to bootloader if the RESET keycode was pressed */
 #define EARLY_INIT_PERFORM_BOOTLOADER_JUMP TRUE
 
-#define DEBOUNCE 2
-
 // Size exposed by the RD75's custom flash-backed EEPROM driver.
 #define EEPROM_SIZE 1152
 

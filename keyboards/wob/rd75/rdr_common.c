@@ -11,6 +11,11 @@
  * the vendor's names (misspellings corrected, see rdr_renames.txt) and source
  * order. Built with ARM GCC 10.3, 96 of the 104 functions compile to exactly
  * the vendor's code; the rest are equivalent. See PARITY.md.
+ *
+ * Updated to the behaviour of Womier's firmware 0.1.5 (reconstructed from its
+ * binary): selectable sleep timeout and debounce, an all-lighting toggle, the
+ * Caps Lock indicator on the logo, LED supply cut when nothing is lit, and the
+ * 24-byte settings layout.
  */
 
 #include "rdr_common.h"
@@ -34,6 +39,10 @@ Keyboard_Info_t Keyboard_Info = {
     .Nkro         = INIT_ALL_SIX_KEY,
     .Mac_Win_Mode = INIT_WIN_MAC_MODE,
     .Win_Lock     = INIT_WIN_LOCK_NLOCK,
+    .All_Led_Off  = INIT_ALL_LED_ON,
+    .Sleep_Time   = INIT_SLEEP_TIME,
+    .Rf_Timer_2   = INIT_RF_TIMER_2,
+    .Debounce     = INIT_DEBOUNCE,
 #if LOGO_LED_ENABLE
     .Logo_On_Off     = INIT_LOGO_ON_OFF,
     .Logo_Mode       = INIT_LOGO_MODE,
@@ -51,12 +60,17 @@ bool     Key_Ble_2_Status       = false;
 bool     Key_Ble_3_Status       = false;
 bool     Key_Fn_Status          = false;
 bool     Key_Reset_Status       = false;
-bool     Keyboard_Reset         = false;
+bool     Key_Debounce_Status    = false;
+bool     Key_Sleep_Time_Status  = false;
+bool     Func_Key_Long_Press    = false;
 uint8_t  Systick_6ms_Count      = 0;
 uint8_t  Systick_10ms_Count     = 0;
 uint16_t Systick_Interval_Count = 0;
 uint16_t Time_3s_Count          = 0;
 uint16_t Func_Time_3s_Count     = 0;
+
+/************************Debounce**************************/
+uint8_t Debounce_Time = INIT_DEBOUNCE;
 
 /************************Data queue**************************/
 volatile uint8_t app_2g4_data_send = 0;
@@ -76,6 +90,10 @@ bool             Init_Spi_Power_Up    = true;
 uint8_t          Init_Spi_100ms_Delay = 0;
 bool             Ble_Name_Spi_Send    = false;
 uint8_t          Ble_Name_Spi_Count   = 1;
+bool             Sleep_Time_Spi_Send  = false;
+bool             Rf_Timer_2_Spi_Send  = false;
+bool             Spi_Sync_Request     = false;
+uint8_t          Spi_Ble_Send_Count   = 0;
 
 const uint32_t g_es_dma_ch2pri_cfg = 0xAA008006;
 const uint32_t g_es_dma_ch2alt_cfg = 0xC0000007;
@@ -155,16 +173,19 @@ uint8_t Led_Wave_Pwm_Tab[128] = {
 
 uint8_t Led_Batt_Index_Tab[10] = {16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
 
-uint8_t  Systick_Led_Count   = 0;
-uint8_t  Led_Point_Count     = 0;
-uint8_t  Mac_Win_Point_Count = 0;
-bool     Led_Flash_Busy      = false;
-bool     Led_Off_Start       = false;
-bool     Led_Power_Up        = false;
-uint16_t Led_Power_Up_Delay  = 0;
-bool     Usb_If_Ok_Led       = false;
-bool     Test_Led            = false;
-uint8_t  Test_Colour         = 0;
+uint8_t  Systick_Led_Count      = 0;
+uint8_t  Led_Point_Count        = 0;
+uint8_t  Mac_Win_Point_Count    = 0;
+uint8_t  Debounce_Point_Count   = 0;
+uint8_t  Sleep_Time_Point_Count = 0;
+bool     Led_Flash_Busy         = false;
+bool     Led_Off_Start          = false;
+bool     Led_Power_Off          = false;
+bool     Led_Power_Up           = false;
+uint16_t Led_Power_Up_Delay     = 0;
+bool     Usb_If_Ok_Led          = false;
+bool     Test_Led               = false;
+uint8_t  Test_Colour            = 0;
 
 uint8_t                       g_es_pwm_rgb_matrix_array_dma_buf[(RGB_MATRIX_LED_COUNT * ES_PWM_LED_BYTE) + 2] = {0};
 md_dma_channel_config_typedef DMA_list[5]                                                                   = {0};
@@ -245,6 +266,8 @@ void Emi_Init(void) {
     Mode_Synchronization_Signal          = false;
     Led_Rf_Pair_Flg                      = false;
     Ble_Name_Spi_Send                    = false;
+    Sleep_Time_Spi_Send                  = false;
+    Rf_Timer_2_Spi_Send                  = false;
 }
 
 void Emi_Read_Data(uint8_t *User_Data, uint8_t User_Length) {
@@ -430,6 +453,12 @@ void Spi_Send_Command(uint8_t Command) {
             g_es_spi_tx_buf[5] = strlen(USER_BLE3_NAME);
             uint8_t len        = strlen(USER_BLE3_NAME);
             memcpy(&g_es_spi_tx_buf[6], USER_BLE3_NAME, len);
+        } else if ((Command == USER_SLEEP_TIME_DATA) || (Command == USER_RF_TIMER_2_DATA)) {
+            uint32_t value     = (Command == USER_SLEEP_TIME_DATA) ? Keyboard_Info.Sleep_Time : Keyboard_Info.Rf_Timer_2;
+            g_es_spi_tx_buf[3] = value >> 24;
+            g_es_spi_tx_buf[4] = value >> 16;
+            g_es_spi_tx_buf[5] = value >> 8;
+            g_es_spi_tx_buf[6] = value;
         }
 
         es_spi_send_recv_by_dma(USER_KEYBOARD_LENGTH, g_es_spi_rx_buf, g_es_spi_tx_buf);
@@ -513,6 +542,17 @@ void Get_Spi_Return_Data(uint8_t *Data) {
                 Ble_Name_Spi_Send  = true;
                 Ble_Name_Spi_Count = 1;
             }
+        }
+
+        // The radio reports its copies of the two timers; resend ours if they differ.
+        uint32_t Rf_Sleep_Time = ((uint32_t)Data[11] << 24) | ((uint32_t)Data[12] << 16) | ((uint32_t)Data[13] << 8) | Data[14];
+        if (Rf_Sleep_Time != Keyboard_Info.Sleep_Time) {
+            Sleep_Time_Spi_Send = true;
+        }
+
+        uint32_t Rf_Timer_2 = ((uint32_t)Data[15] << 24) | ((uint32_t)Data[16] << 16) | ((uint32_t)Data[17] << 8) | Data[18];
+        if (Rf_Timer_2 != Keyboard_Info.Rf_Timer_2) {
+            Rf_Timer_2_Spi_Send = true;
         }
     } else if (Data[2] == USER_KEYBOARD_SLEEP) {
         if (Keyboard_Status.System_Work_Status && (Data[3] == USER_SLEEP_PASS)) {
@@ -627,6 +667,34 @@ void Ble_Name_Synchronization(void) {
     }
 }
 
+// Pending radio updates, run from the main loop every 10 ms (Vector78 sets
+// Spi_Sync_Request) rather than from the interrupt.
+void Spi_Synchronization(void) {
+    if (Spi_Sync_Request == false) {
+        return;
+    }
+    Spi_Sync_Request = false;
+
+    if (Mode_Synchronization_Signal) {
+        Mode_Synchronization_Signal = false;
+        Mode_Synchronization();
+    }
+
+    if (Ble_Name_Spi_Send) {
+        Ble_Name_Synchronization();
+    }
+
+    if (Sleep_Time_Spi_Send) {
+        Spi_Send_Command(USER_SLEEP_TIME_DATA);
+        Sleep_Time_Spi_Send = false;
+    }
+
+    if (Rf_Timer_2_Spi_Send) {
+        Spi_Send_Command(USER_RF_TIMER_2_DATA);
+        Rf_Timer_2_Spi_Send = false;
+    }
+}
+
 // Queues a HID report for the radio: [command, length, report type, report...].
 void User_bluetooth_send_keyboard(uint8_t *report, uint32_t len) {
     if (app_2g4_buffer_full()) {
@@ -710,9 +778,14 @@ void mcu_reset(void) {
 }
 
 void User_Keyboard_Reset(void) {
+    Keyboard_Info.Ble_Channel  = INIT_BLE_CHANNEL;
     Keyboard_Info.Nkro         = INIT_ALL_SIX_KEY;
     Keyboard_Info.Mac_Win_Mode = INIT_WIN_MAC_MODE;
     Keyboard_Info.Win_Lock     = INIT_WIN_LOCK_NLOCK;
+    Keyboard_Info.All_Led_Off  = INIT_ALL_LED_ON;
+    Keyboard_Info.Sleep_Time   = INIT_SLEEP_TIME;
+    Keyboard_Info.Rf_Timer_2   = INIT_RF_TIMER_2;
+    Keyboard_Info.Debounce     = INIT_DEBOUNCE;
 #if LOGO_LED_ENABLE
     Keyboard_Info.Logo_On_Off     = INIT_LOGO_ON_OFF;
     Keyboard_Info.Logo_Mode       = INIT_LOGO_MODE;
@@ -734,9 +807,54 @@ void User_Keyboard_Reset(void) {
     Reset_Save_Flash = true;
     eeprom_write_block_user(&Keyboard_Info, 0, sizeof(Keyboard_Info_t));
     Reset_Save_Flash = false;
+    Debounce_Time    = Keyboard_Info.Debounce;
 
     eeconfig_disable();
     soft_reset_keyboard();
+}
+
+// 5 ms <-> 2 ms; the logo then flashes green (5 ms) or red (2 ms).
+void User_Debounce_Toggle(void) {
+    Keyboard_Info.Debounce = (Keyboard_Info.Debounce == DEBOUNCE_FAST) ? DEBOUNCE_SLOW : DEBOUNCE_FAST;
+    Debounce_Time          = Keyboard_Info.Debounce;
+    Debounce_Point_Count   = 3;
+    Save_Flash_Set();
+}
+
+// 1 -> 3 -> 10 -> 30 -> 1 min; the logo then flashes red, green, blue or white.
+void User_Sleep_Time_Next(void) {
+    switch (Keyboard_Info.Sleep_Time) {
+        case SLEEP_TIME_1MIN:  Keyboard_Info.Sleep_Time = SLEEP_TIME_3MIN;  break;
+        case SLEEP_TIME_3MIN:  Keyboard_Info.Sleep_Time = SLEEP_TIME_10MIN; break;
+        case SLEEP_TIME_10MIN: Keyboard_Info.Sleep_Time = SLEEP_TIME_30MIN; break;
+        case SLEEP_TIME_30MIN: Keyboard_Info.Sleep_Time = SLEEP_TIME_1MIN;  break;
+        default:               Keyboard_Info.Sleep_Time = SLEEP_TIME_3MIN;  break;
+    }
+
+    Spi_Send_Command(USER_SLEEP_TIME_DATA);
+    Sleep_Time_Spi_Send    = false;
+    Sleep_Time_Point_Count = 3;
+    Systick_Led_Count      = 0;
+    Save_Flash_Set();
+}
+
+// Runs the action of a function key held for 3 s (see Vector78).
+void User_Func_Key_Long_Press(void) {
+    if (Func_Key_Long_Press == false) {
+        return;
+    }
+    Func_Key_Long_Press = false;
+
+    if (Key_Reset_Status) {
+        Key_Reset_Status = false;
+        User_Keyboard_Reset();
+    } else if (Key_Debounce_Status) {
+        Key_Debounce_Status = false;
+        User_Debounce_Toggle();
+    } else if (Key_Sleep_Time_Status) {
+        Key_Sleep_Time_Status = false;
+        User_Sleep_Time_Next();
+    }
 }
 
 void Save_Flash_Set(void) {
@@ -893,7 +1011,7 @@ void es_chibios_user_idle_loop_hook(void) {
             while (Spi_Ack_Send_Command(USER_KEYBOARD_SLEEP) != SPI_ACK) {
                 if (--delay == 0) {
                     User_Wakeup();
-                    Usb_Suspend_Delay = 6000;
+                    Usb_Suspend_Delay = 600;
                     return;
                 }
             }
@@ -1064,7 +1182,8 @@ void es_chibios_user_idle_loop_hook(void) {
         gpio_write_pin_high(User_Pin_Tab_Col[i]);
     }
 
-    uint8_t Rol_Count = 0, Col_Count = 0;
+    // 0xFF: no key found (0.1.2 then replayed the key at 0/0, Esc).
+    uint8_t Rol_Count = 0xFF, Col_Count = 0xFF;
     for (i = 0; i < KEYBOARD_ROW; i++) {
         if (Sleep_Status & (1 << i)) {
             for (uint8_t j = 0; j < KEYBOARD_COL; j++) {
@@ -1104,16 +1223,18 @@ void es_chibios_user_idle_loop_hook(void) {
             }
         }
 
-        uint16_t wake_keycode;
+        if ((Rol_Count != 0xFF) && (Col_Count != 0xFF)) {
+            uint16_t wake_keycode;
 #if defined(DYNAMIC_KEYMAP_ENABLE)
-        wake_keycode = dynamic_keymap_get_keycode(0, Rol_Count, Col_Count);
+            wake_keycode = dynamic_keymap_get_keycode(0, Rol_Count, Col_Count);
 #else
-        wake_keycode = keymap_key_to_keycode(0, (keypos_t){.row = Rol_Count, .col = Col_Count});
+            wake_keycode = keymap_key_to_keycode(0, (keypos_t){.row = Rol_Count, .col = Col_Count});
 #endif
-        register_code(wake_keycode);
-        wait_ms(2);
-        unregister_code(wake_keycode);
-        wait_ms(2);
+            register_code(wake_keycode);
+            wait_ms(2);
+            unregister_code(wake_keycode);
+            wait_ms(2);
+        }
     }
 
     Board_Wakeup_Init();
@@ -1124,36 +1245,20 @@ void es_chibios_user_idle_loop_hook(void) {
 void Init_Keyboard_Information(void) {
     eeprom_read_block_user(&Keyboard_Info, 0, sizeof(Keyboard_Info_t));
 
-    if ((Keyboard_Info.Key_Mode == 0xFF) && (Keyboard_Info.Ble_Channel == 0xFF) && (Keyboard_Info.Batt_Number == 0xFF) && (Keyboard_Info.Nkro == 0xFF) && (Keyboard_Info.Mac_Win_Mode == 0xFF) && (Keyboard_Info.Win_Lock == 0xFF)) {
+    bool Blank = (Keyboard_Info.Key_Mode == 0xFF) && (Keyboard_Info.Ble_Channel == 0xFF) && (Keyboard_Info.Batt_Number == 0xFF) && (Keyboard_Info.Nkro == 0xFF) && (Keyboard_Info.Mac_Win_Mode == 0xFF) && (Keyboard_Info.Win_Lock == 0xFF) && (Keyboard_Info.Sleep_Time == 0xFFFFFFFF) && (Keyboard_Info.Rf_Timer_2 == 0xFFFFFFFF) && (Keyboard_Info.Debounce == 0xFF);
+    bool Zero  = (Keyboard_Info.Key_Mode == 0) && (Keyboard_Info.Ble_Channel == 0) && (Keyboard_Info.Batt_Number == 0) && (Keyboard_Info.Nkro == 0) && (Keyboard_Info.Mac_Win_Mode == 0) && (Keyboard_Info.Win_Lock == 0) && (Keyboard_Info.Sleep_Time == 0) && (Keyboard_Info.Rf_Timer_2 == 0) && (Keyboard_Info.Debounce == 0);
+
+    if (Blank || Zero) {
         Keyboard_Info.Key_Mode     = INIT_WORK_MODE;
         Keyboard_Info.Ble_Channel  = INIT_BLE_CHANNEL;
         Keyboard_Info.Batt_Number  = INIT_BATT_NUMBER;
         Keyboard_Info.Nkro         = INIT_ALL_SIX_KEY;
         Keyboard_Info.Mac_Win_Mode = INIT_WIN_MAC_MODE;
         Keyboard_Info.Win_Lock     = INIT_WIN_LOCK_NLOCK;
-#if LOGO_LED_ENABLE
-        Keyboard_Info.Logo_On_Off     = INIT_LOGO_ON_OFF;
-        Keyboard_Info.Logo_Mode       = INIT_LOGO_MODE;
-        Keyboard_Info.Logo_Colour     = INIT_LOGO_COLOUR;
-        Keyboard_Info.Logo_Saturation = INIT_LOGO_SATURATION;
-        Keyboard_Info.Logo_Brightness = INIT_LOGO_BRIGHTNESS;
-        Keyboard_Info.Logo_Speed      = INIT_LOGO_SPEED;
-#endif
-#if SIDE_LED_ENABLE
-        Keyboard_Info.Side_On_Off     = INIT_SIDE_ON_OFF;
-        Keyboard_Info.Side_Mode       = INIT_SIDE_MODE;
-        Keyboard_Info.Side_Colour     = INIT_SIDE_COLOUR;
-        Keyboard_Info.Side_Saturation = INIT_SIDE_SATURATION;
-        Keyboard_Info.Side_Brightness = INIT_SIDE_BRIGHTNESS;
-        Keyboard_Info.Side_Speed      = INIT_SIDE_SPEED;
-#endif
-    } else if ((Keyboard_Info.Key_Mode == 0) && (Keyboard_Info.Ble_Channel == 0) && (Keyboard_Info.Batt_Number == 0) && (Keyboard_Info.Nkro == 0) && (Keyboard_Info.Mac_Win_Mode == 0) && (Keyboard_Info.Win_Lock == 0)) {
-        Keyboard_Info.Key_Mode     = INIT_WORK_MODE;
-        Keyboard_Info.Ble_Channel  = INIT_BLE_CHANNEL;
-        Keyboard_Info.Batt_Number  = INIT_BATT_NUMBER;
-        Keyboard_Info.Nkro         = INIT_ALL_SIX_KEY;
-        Keyboard_Info.Mac_Win_Mode = INIT_WIN_MAC_MODE;
-        Keyboard_Info.Win_Lock     = INIT_WIN_LOCK_NLOCK;
+        Keyboard_Info.All_Led_Off  = INIT_ALL_LED_ON;
+        Keyboard_Info.Sleep_Time   = INIT_SLEEP_TIME;
+        Keyboard_Info.Rf_Timer_2   = INIT_RF_TIMER_2;
+        Keyboard_Info.Debounce     = INIT_DEBOUNCE;
 #if LOGO_LED_ENABLE
         Keyboard_Info.Logo_On_Off     = INIT_LOGO_ON_OFF;
         Keyboard_Info.Logo_Mode       = INIT_LOGO_MODE;
@@ -1171,6 +1276,27 @@ void Init_Keyboard_Information(void) {
         Keyboard_Info.Side_Speed      = INIT_SIDE_SPEED;
 #endif
     } else {
+        // Settings saved by firmware 0.1.2 (12 bytes, logo settings at offset 6)
+        // leave the bytes after them erased. Not done by the vendor's 0.1.5.
+        if ((Keyboard_Info.Rf_Timer_2 == 0xFFFFFFFF) && (Keyboard_Info.Debounce == 0xFF)) {
+            uint8_t Old_Logo[6];
+            memcpy(Old_Logo, &((uint8_t *)&Keyboard_Info)[6], sizeof(Old_Logo));
+
+            Keyboard_Info.All_Led_Off = INIT_ALL_LED_ON;
+            Keyboard_Info.Reserved    = 0;
+            Keyboard_Info.Sleep_Time  = INIT_SLEEP_TIME;
+            Keyboard_Info.Rf_Timer_2  = INIT_RF_TIMER_2;
+            Keyboard_Info.Debounce    = INIT_DEBOUNCE;
+#if LOGO_LED_ENABLE
+            Keyboard_Info.Logo_On_Off     = Old_Logo[0];
+            Keyboard_Info.Logo_Mode       = Old_Logo[1];
+            Keyboard_Info.Logo_Colour     = Old_Logo[2];
+            Keyboard_Info.Logo_Saturation = Old_Logo[3];
+            Keyboard_Info.Logo_Brightness = Old_Logo[4];
+            Keyboard_Info.Logo_Speed      = Old_Logo[5];
+#endif
+        }
+
         if (Keyboard_Info.Key_Mode > QMK_USB_MODE) {
             Keyboard_Info.Key_Mode = QMK_USB_MODE;
         }
@@ -1193,6 +1319,20 @@ void Init_Keyboard_Information(void) {
 
         if (Keyboard_Info.Win_Lock > INIT_WIN_LOCK) {
             Keyboard_Info.Win_Lock = INIT_WIN_NLOCK;
+        }
+
+        if (Keyboard_Info.Sleep_Time > SLEEP_TIME_30MIN) {
+            Keyboard_Info.Sleep_Time = INIT_SLEEP_TIME;
+        }
+
+        if (Keyboard_Info.Rf_Timer_2 == 0xFFFFFFFF) {
+            Keyboard_Info.Rf_Timer_2 = INIT_RF_TIMER_2;
+        }
+
+        // 0.1.5 only clamps values above 5; 0 would leave released keys held
+        // in its debounce, so it is treated as invalid too.
+        if ((Keyboard_Info.Debounce == 0) || (Keyboard_Info.Debounce > DEBOUNCE_SLOW)) {
+            Keyboard_Info.Debounce = DEBOUNCE_SLOW;
         }
 #if LOGO_LED_ENABLE
         if (Keyboard_Info.Logo_On_Off > LOGO_LED_OFF) {
@@ -1229,6 +1369,8 @@ void Init_Keyboard_Information(void) {
         }
 #endif
     }
+
+    Debounce_Time = Keyboard_Info.Debounce;
 }
 
 void es_change_qmk_nkro_mode_enable(void) {
@@ -1282,10 +1424,10 @@ void User_Keyboard_Init(void) {
     NVIC_SetPriority(PendSV_IRQn, 3);
     NVIC_SetPriority(SysTick_IRQn, 3);
 
-    Usb_If_Ok_Led  = false;
-    Led_Power_Up   = false;
-    Emi_Test_Start = false;
-    Keyboard_Reset = false;
+    Usb_If_Ok_Led       = false;
+    Led_Power_Up        = false;
+    Emi_Test_Start      = false;
+    Func_Key_Long_Press = false;
 
 #if LOGO_LED_ENABLE
     Logo_Init();
@@ -2191,7 +2333,7 @@ void rgb_matrix_driver_flush_pwm_dma_start(void) {
         return;
     }
 
-    if (rgb_matrix_is_enabled()) {
+    if (rgb_matrix_is_enabled() && (Led_Power_Off == false)) {
         gpio_write_pin_high(ES_LED_POWER_IO);
         if (Led_Off_Start) {
             Led_Off_Start = false;
@@ -2291,6 +2433,22 @@ const rgb_matrix_driver_t rgb_matrix_driver = {
     .set_color_all = rgb_matrix_driver_set_color_all,
 };
 
+// Decides whether anything is lit (Led_Power_Off lets the flush cut the LED
+// supply; the indicators below clear it when they draw), and blanks every LED
+// while all lighting is switched off.
+void Led_All_Off_Show(void) {
+    bool Keys_Off = (Keyboard_Info.All_Led_Off == INIT_ALL_LED_OFF) || (rgb_matrix_get_val() == 0);
+    bool Logo_Off = (Keyboard_Info.Logo_On_Off == LOGO_LED_OFF) || (Keyboard_Info.Logo_Brightness == 0) || (Keyboard_Info.Logo_Mode == LOGO_OFF_MODE);
+
+    Led_Power_Off = Keys_Off && Logo_Off;
+
+    if (Keyboard_Info.All_Led_Off == INIT_ALL_LED_OFF) {
+        for (uint8_t i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
+            rgb_matrix_set_color(i, 0, 0, 0);
+        }
+    }
+}
+
 void Led_Power_Low_Show(void) {
     for (uint8_t i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
         rgb_matrix_set_color(i, 0, 0, 0);
@@ -2315,6 +2473,11 @@ void Led_Power_Low_Show(void) {
 // while reconnecting, solid for a while once connected.
 void Led_Rf_Mode_Show(void) {
     uint8_t Temp_Colour = 0, Led_Index = 0;
+
+    for (uint8_t i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
+        rgb_matrix_set_color(i, 0, 0, 0);
+    }
+
     if (Keyboard_Info.Key_Mode == QMK_BLE_MODE) {
         if (Keyboard_Info.Ble_Channel == QMK_BLE_CHANNEL_1) {
             Temp_Colour = 5;
@@ -2365,8 +2528,13 @@ void Led_Rf_Mode_Show(void) {
 }
 
 // Battery gauge on the number row: green wave while charging, all green when
-// charged, otherwise one key per 10 % coloured red / yellow / green.
+// charged, otherwise one key per full 10 %, red below 30 %, yellow below 60 %,
+// green above.
 void Led_Batt_Number_Show(void) {
+    for (uint8_t i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
+        rgb_matrix_set_color(i, 0, 0, 0);
+    }
+
     if (es_stdby_pin_state == 1) {
         if (Batt_Led_Count > 1) {
             Batt_Led_Count = 0;
@@ -2392,14 +2560,11 @@ void Led_Batt_Number_Show(void) {
         }
     } else {
         uint8_t Colour_R, Colour_G, Colour_B;
-        uint8_t Temp_Count = (Keyboard_Info.Batt_Number / 10) + 1;
-        if (Temp_Count > 9) {
-            Temp_Count = 10;
-        }
+        uint8_t Temp_Count = Keyboard_Info.Batt_Number / 10;
 
-        if (Temp_Count <= 2) {
+        if (Keyboard_Info.Batt_Number < 30) {
             Colour_R = 255, Colour_G = 0, Colour_B = 0;
-        } else if (Temp_Count <= 5) {
+        } else if (Keyboard_Info.Batt_Number < 60) {
             Colour_R = 255, Colour_G = 255, Colour_B = 0;
         } else {
             Colour_R = 0, Colour_G = 255, Colour_B = 0;
@@ -2411,17 +2576,34 @@ void Led_Batt_Number_Show(void) {
     }
 }
 
-// Logo flash confirming a setting change: white (Led_Point_Count) or yellow
-// (Mac_Win_Point_Count), one blink per count.
+// Logo flash confirming a setting change, one blink per count: white
+// (Led_Point_Count), yellow (Mac_Win_Point_Count), green 5 ms / red 2 ms
+// (Debounce_Point_Count), or red 1 / green 3 / blue 10 / white 30 min
+// (Sleep_Time_Point_Count).
+static void Logo_Set_Colour(uint8_t r, uint8_t g, uint8_t b) {
+    for (uint8_t i = 0; i < LOGO_LED_SIZE; i++) {
+        rgb_matrix_set_color(Logo_Index_Tab[i], r, g, b);
+    }
+}
+
 void Led_Point_Flash_Show(void) {
     if (Logo_Flash_Count < 25) {
         if (Led_Point_Count) {
-            for (uint8_t i = 0; i < LOGO_LED_SIZE; i++) {
-                rgb_matrix_set_color(Logo_Index_Tab[i], U_PWM, U_PWM, U_PWM);
+            Logo_Set_Colour(U_PWM, U_PWM, U_PWM);
+        } else if (Mac_Win_Point_Count) {
+            Logo_Set_Colour(U_PWM, U_PWM, 0);
+        } else if (Debounce_Point_Count) {
+            if (Keyboard_Info.Debounce != DEBOUNCE_FAST) {
+                Logo_Set_Colour(0, U_PWM, 0);
+            } else {
+                Logo_Set_Colour(U_PWM, 0, 0);
             }
         } else {
-            for (uint8_t i = 0; i < LOGO_LED_SIZE; i++) {
-                rgb_matrix_set_color(Logo_Index_Tab[i], U_PWM, U_PWM, 0);
+            switch (Keyboard_Info.Sleep_Time) {
+                case SLEEP_TIME_1MIN:  Logo_Set_Colour(U_PWM, 0, 0);         break;
+                case SLEEP_TIME_3MIN:  Logo_Set_Colour(0, U_PWM, 0);         break;
+                case SLEEP_TIME_10MIN: Logo_Set_Colour(0, 0, U_PWM);         break;
+                case SLEEP_TIME_30MIN: Logo_Set_Colour(U_PWM, U_PWM, U_PWM); break;
             }
         }
     } else {
@@ -2437,20 +2619,39 @@ void Led_Point_Flash_Show(void) {
             Led_Point_Count--;
         } else if (Mac_Win_Point_Count) {
             Mac_Win_Point_Count--;
+        } else if (Debounce_Point_Count) {
+            Debounce_Point_Count--;
+        } else if (Sleep_Time_Point_Count) {
+            Sleep_Time_Point_Count--;
         }
     }
 }
 
+// Logo: setting flashes, else its effect with Caps Lock shown in white.
 void User_Point_Show(void) {
-    if (Led_Point_Count || Mac_Win_Point_Count) {
+    if (Led_Point_Count || Mac_Win_Point_Count || Debounce_Point_Count || Sleep_Time_Point_Count) {
+        Led_Power_Off = false;
         Led_Point_Flash_Show();
     } else {
         Logo_Flash_Count = 0;
         Logo_Mode_Show();
+
+        bool Caps_Lock;
+        if (Keyboard_Info.Key_Mode == QMK_USB_MODE) {
+            Caps_Lock = host_keyboard_led_state().caps_lock && Usb_If_Ok_Led;
+        } else {
+            Caps_Lock = Keyboard_Status.System_Led_Status & (1 << 1);
+        }
+
+        if (Caps_Lock) {
+            Led_Power_Off = false;
+            Logo_Set_Colour(U_PWM, U_PWM, U_PWM);
+        }
     }
 
     if ((Led_Rf_Pair_Flg == false) || (Keyboard_Info.Key_Mode == QMK_USB_MODE)) {
-        if (Keyboard_Info.Win_Lock) {
+        if ((User_Key_Batt_Num_Show == false) && Keyboard_Info.Win_Lock && ((Keyboard_Info.Key_Mode != QMK_USB_MODE) || Usb_If_Ok_Led)) {
+            Led_Power_Off = false;
             rgb_matrix_set_color(LED_WIN_L_INDEX, U_PWM, U_PWM, U_PWM);
         }
     }
@@ -2470,14 +2671,20 @@ void User_Test_Colour_Show(void) {
 }
 
 void User_Led_Show(void) {
+    Led_All_Off_Show();
+
     if (User_Power_Low) {
+        Led_Power_Off = false;
         Led_Power_Low_Show();
     } else if (Test_Led) {
+        Led_Power_Off = false;
         User_Test_Colour_Show();
     } else if (Led_Rf_Pair_Flg && (Keyboard_Info.Key_Mode != QMK_USB_MODE)) {
+        Led_Power_Off = false;
         Led_Rf_Mode_Show();
         User_Point_Show();
     } else if (User_Key_Batt_Num_Show) {
+        Led_Power_Off = false;
         Led_Batt_Number_Show();
         User_Point_Show();
     } else {
@@ -2499,15 +2706,9 @@ void User_Led_Show(void) {
                     rgb_matrix_set_color(LED_USB_INDEX, U_PWM, U_PWM, U_PWM);
                     break;
             }
+            Led_Power_Off = false;
         }
     }
-
-#if LOGO_LED_ENABLE
-    Logo_Mode_Show();
-#endif
-#if SIDE_LED_ENABLE
-    Side_Mode_Show();
-#endif
 }
 
 
@@ -2686,6 +2887,11 @@ void Logo_Off_mode_Show(void) {
 }
 
 void Logo_Mode_Show(void) {
+    if (Keyboard_Info.All_Led_Off == INIT_ALL_LED_OFF) {
+        Logo_Off_mode_Show();
+        return;
+    }
+
     if (Keyboard_Info.Logo_On_Off == LOGO_LED_ON) {
         switch (Keyboard_Info.Logo_Mode) {
             case LOGO_WAVE_RGB_MODE: Logo_Wave_Rgb_mode_Show(); break;
@@ -2951,10 +3157,13 @@ OSAL_IRQ_HANDLER(Vector78) {
         }
     }
 
+    // Queued reports go out every tick in 2.4G mode, every 4th tick (8 ms) over
+    // Bluetooth.
     if (Keyboard_Info.Key_Mode != QMK_USB_MODE) {
         if (Keyboard_Status.System_Work_Status && (Keyboard_Status.System_Sleep_Mode == 0)) {
             Spi_Ack_Send_Command(USER_KEYBOARD_SLEEP);
-        } else {
+        } else if ((Keyboard_Info.Key_Mode != QMK_BLE_MODE) || (++Spi_Ble_Send_Count > 3)) {
+            Spi_Ble_Send_Count = 0;
             Spi_Main_Loop();
         }
     }
@@ -3021,14 +3230,7 @@ OSAL_IRQ_HANDLER(Vector78) {
     if (Systick_10ms_Count >= 5) {
         Systick_10ms_Count = 0;
 
-        if (Mode_Synchronization_Signal) {
-            Mode_Synchronization_Signal = false;
-            Mode_Synchronization();
-        }
-
-        if (Ble_Name_Spi_Send) {
-            Ble_Name_Synchronization();
-        }
+        Spi_Sync_Request = true;
 
         Systick_Led_Count++;
         if (Systick_Led_Count == 255) {
@@ -3042,7 +3244,7 @@ OSAL_IRQ_HANDLER(Vector78) {
 
         if (Led_Power_Up == false) {
             Led_Power_Up_Delay++;
-            if (Led_Power_Up_Delay >= 50) {
+            if (Led_Power_Up_Delay >= 100) {
                 Led_Power_Up_Delay = 0;
                 Led_Power_Up       = true;
                 if (Keyboard_Info.Key_Mode == QMK_BLE_MODE) {
@@ -3145,14 +3347,13 @@ OSAL_IRQ_HANDLER(Vector78) {
             }
         }
 
-        // Factory reset key: takes effect after being held for 3 s.
-        Func_Time_3s_Count++;
-        if (Func_Time_3s_Count >= 300) {
-            Func_Time_3s_Count = 0;
-
-            if (Key_Reset_Status) {
-                Key_Reset_Status = false;
-                Keyboard_Reset   = true;
+        // Factory reset, debounce and sleep-time keys: take effect after being
+        // held for 3 s (User_Func_Key_Long_Press runs the action).
+        if (Key_Reset_Status || Key_Debounce_Status || Key_Sleep_Time_Status) {
+            Func_Time_3s_Count++;
+            if (Func_Time_3s_Count >= 300) {
+                Func_Time_3s_Count  = 0;
+                Func_Key_Long_Press = true;
             }
         }
     }

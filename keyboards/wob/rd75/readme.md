@@ -17,6 +17,16 @@ Flashing example for this keyboard:
 
 See the [build environment setup](https://docs.qmk.fm/#/getting_started_build_tools) and the [make instructions](https://docs.qmk.fm/#/getting_started_make_guide) for more information. Brand new to QMK? Start with our [Complete Newbs Guide](https://docs.qmk.fm/#/newbs).
 
+## Keyboard functions
+
+As in Womier's firmware 0.1.5:
+
+* **Fn + Del**: all lighting (keys and logo) on/off
+* **Fn + T**, held 3 s: sleep timeout 1 → 3 → 10 → 30 min; the logo flashes red, green, blue or white
+* **Fn + H**, held 3 s: debounce 5 ms ↔ 2 ms; the logo flashes green (5 ms) or red (2 ms)
+* **Fn + End** (`EE_CLR`), held 3 s: factory reset
+* The logo lights white while Caps Lock is on
+
 ## Bootloader
 
 Enter the bootloader in 2 ways:

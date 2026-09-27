@@ -79,11 +79,8 @@ void notify_usb_device_state_change_kb(struct usb_device_state usb_device_state)
 }
 
 void housekeeping_task_kb(void) {
-    if (Keyboard_Reset) {
-        Keyboard_Reset = false;
-        User_Keyboard_Reset();
-        return;
-    }
+    Spi_Synchronization();
+    User_Func_Key_Long_Press();
 
     es_chibios_user_idle_loop_hook();
     housekeeping_task_user();
@@ -222,7 +219,8 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 } else {
                     es_change_qmk_nkro_mode_enable();
                     Led_Point_Count = 3;
-                } 
+                }
+                Logo_Flash_Count = 0;
             }
         } return true;
         case QMK_TEST_COLOUR: {                                     //键盘灯光颜色测试
@@ -305,6 +303,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                 if ((record->event.key.col == WIN_COL) && (record->event.key.row == WIN_ROW) && (Keyboard_Info.Mac_Win_Mode != INIT_WIN_MODE)) {
                     Keyboard_Info.Mac_Win_Mode = INIT_WIN_MODE;
                     Mac_Win_Point_Count = 1;
+                    Logo_Flash_Count = 0;
                     unregister_code(KC_LALT); unregister_code(KC_LGUI); unregister_code(KC_RALT); unregister_code(KC_RGUI); unregister_code(KC_APP);
                     Save_Flash_Set();
                 }
@@ -316,19 +315,50 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                     Keyboard_Info.Mac_Win_Mode = INIT_MAC_MODE;
                     Keyboard_Info.Win_Lock = INIT_WIN_NLOCK;
                     Mac_Win_Point_Count = 3;
+                    Logo_Flash_Count = 0;
                     unregister_code(KC_LALT); unregister_code(KC_LGUI); unregister_code(KC_RALT); unregister_code(KC_RGUI); unregister_code(KC_APP);
                     Save_Flash_Set();
                 }
             }
         } return true;
         case EE_CLR: {                                              //系统复位
-            if (record->event.pressed) {
-                Key_Reset_Status = true;
-                record->event.pressed = false;
-            } else {
-                Key_Reset_Status = false;
-            }
+            Key_Reset_Status = record->event.pressed;
+            record->event.pressed = false;
             Func_Time_3s_Count = 0;
+        } return true;
+        case QMK_SLEEP_TIME: {                                      // hold 3 s: next sleep timeout
+            Key_Sleep_Time_Status = record->event.pressed;
+            Func_Time_3s_Count = 0;
+        } return true;
+        case QMK_DEBOUNCE: {                                        // hold 3 s: 2 ms / 5 ms debounce
+            Key_Debounce_Status = record->event.pressed;
+            Func_Time_3s_Count = 0;
+        } return true;
+        case QMK_RF_TIMER_2_ADD: {
+            if (!record->event.pressed) {
+                Keyboard_Info.Rf_Timer_2 += 15;
+                Spi_Send_Command(USER_RF_TIMER_2_DATA);
+                Rf_Timer_2_Spi_Send = false;
+                Save_Flash_Set();
+            }
+        } return true;
+        case QMK_ALL_LED_TOG: {                                     // all lighting on/off
+            if (!record->event.pressed) {
+                if (Keyboard_Info.All_Led_Off) {
+                    Keyboard_Info.All_Led_Off = INIT_ALL_LED_ON;
+                    Keyboard_Info.Logo_On_Off = LOGO_LED_ON;
+                    if (rgb_matrix_get_val() == 0) {
+                        rgb_matrix_sethsv(rgb_matrix_get_hue(), rgb_matrix_get_sat(), RGB_MATRIX_MAXIMUM_BRIGHTNESS);
+                    }
+                    if (Keyboard_Info.Logo_Brightness == LOGO_MIN_BRIGHTNESS) {
+                        Keyboard_Info.Logo_Brightness = LOGO_MAX_BRIGHTNESS;
+                    }
+                } else {
+                    Keyboard_Info.All_Led_Off = INIT_ALL_LED_OFF;
+                    Keyboard_Info.Logo_On_Off = LOGO_LED_OFF;
+                }
+                Save_Flash_Set();
+            }
         } return true;
     #if LOGO_LED_ENABLE
         case LOGO_TOG: {                                            //logo 灯光开关
@@ -441,6 +471,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                     } else {
                         Keyboard_Info.Logo_Brightness = LOGO_MAX_BRIGHTNESS;
                         Led_Point_Count = 3;
+                        Logo_Flash_Count = 0;
                     }
                 }
                 Save_Flash_Set();
@@ -456,6 +487,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                     } else {
                         Keyboard_Info.Logo_Brightness = LOGO_MIN_BRIGHTNESS;
                         Led_Point_Count = 3;
+                        Logo_Flash_Count = 0;
                     }
                 }
                 Save_Flash_Set();
@@ -471,6 +503,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                     } else {
                         Keyboard_Info.Logo_Speed = LOGO_MAX_SPEED;
                         Led_Point_Count = 3;
+                        Logo_Flash_Count = 0;
                     }
                 }
                 Save_Flash_Set();
@@ -486,6 +519,7 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   /*键盘只要
                     } else {
                         Keyboard_Info.Logo_Speed = LOGO_MIN_SPEED;
                         Led_Point_Count = 3;
+                        Logo_Flash_Count = 0;
                     }
                 }
                 Save_Flash_Set();

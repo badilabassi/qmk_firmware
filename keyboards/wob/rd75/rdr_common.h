@@ -58,6 +58,9 @@
 #define USER_BLE2_WRITE_NAME    0X13
 #define USER_BLE3_WRITE_NAME    0X14
 
+#define USER_SLEEP_TIME_DATA	0X15            // sleep timeout in seconds, 4 bytes big-endian
+#define USER_RF_TIMER_2_DATA	0X16            // second radio timer, 4 bytes big-endian
+
 #define USER_KEY_BYTE_LENGTH	0X08
 #define USER_KEY_BIT_LENGTH		0X0F
 #define USER_MOUSE_LENGTH		0X08
@@ -134,6 +137,22 @@ typedef enum {
 #define INIT_WIN_LOCK           (1)                  // Win key locked
 #define INIT_WIN_LOCK_NLOCK     (INIT_WIN_NLOCK)     // Win key not locked
 
+#define INIT_ALL_LED_ON         (0)                  // lighting on
+#define INIT_ALL_LED_OFF        (1)                  // all lighting (keys and logo) off
+
+#define SLEEP_TIME_1MIN         (60)                 // sleep timeouts, in seconds
+#define SLEEP_TIME_3MIN         (180)
+#define SLEEP_TIME_10MIN        (600)
+#define SLEEP_TIME_30MIN        (1800)
+#define INIT_SLEEP_TIME         (SLEEP_TIME_3MIN)
+
+#define INIT_RF_TIMER_2         (0xFFFFFFFE)         // firmware 0.1.5 default
+
+#define DEBOUNCE_FAST           (2)                  // debounce times, in ms
+#define DEBOUNCE_SLOW           (5)
+#define INIT_DEBOUNCE           (DEBOUNCE_SLOW)
+
+// Keycode order follows firmware 0.1.5, so the values match Womier's VIA definition.
 #define USER_DEFINE_KEY         (QK_KB)
 enum Custom_Keycodes {
     QMK_KB_MODE_2P4G = USER_DEFINE_KEY,
@@ -145,6 +164,10 @@ enum Custom_Keycodes {
     QMK_WIN_LOCK,
     QMK_KB_SIX_N_CH,
     QMK_TEST_COLOUR,                        // +
+    QMK_SLEEP_TIME,                         // hold 3 s: next sleep timeout
+    QMK_RF_TIMER_2_ADD,                     // adds 15 to the second radio timer (not in the default keymap)
+    QMK_DEBOUNCE,                           // hold 3 s: toggle 2 ms / 5 ms debounce
+    QMK_ALL_LED_TOG,                        // all lighting on/off
 #if LOGO_LED_ENABLE
     LOGO_TOG,
     LOGO_MOD,
@@ -203,17 +226,26 @@ enum Custom_Keycodes {
 #define QK_WLO	QMK_WIN_LOCK
 #define SIX_N	QMK_KB_SIX_N_CH
 #define TEST_CL	QMK_TEST_COLOUR     // +
+#define SLP_TIM	QMK_SLEEP_TIME
+#define DEB_TOG	QMK_DEBOUNCE
+#define LED_TOG	QMK_ALL_LED_TOG
 
 /************************Basic variables**************************/
 /************************Basic variables**************************/
 /************************Basic variables**************************/
+// Saved in flash; the layout matches firmware 0.1.5.
 typedef struct {
-    uint8_t Key_Mode;               // keyboard work mode
-    uint8_t Ble_Channel;            // Bluetooth channel
-    uint8_t Batt_Number;            // battery level
-    uint8_t Nkro;                   // 6-key / N-key rollover
-    uint8_t Mac_Win_Mode;           // Mac or Windows mode
-    uint8_t Win_Lock;               // Win key lock
+    uint8_t  Key_Mode;              // keyboard work mode
+    uint8_t  Ble_Channel;           // Bluetooth channel
+    uint8_t  Batt_Number;           // battery level
+    uint8_t  Nkro;                  // 6-key / N-key rollover
+    uint8_t  Mac_Win_Mode;          // Mac or Windows mode
+    uint8_t  Win_Lock;              // Win key lock
+    uint8_t  All_Led_Off;           // all lighting (keys and logo) off
+    uint8_t  Reserved;
+    uint32_t Sleep_Time;            // radio sleep timeout, in seconds
+    uint32_t Rf_Timer_2;            // second timer kept by the radio; meaning unknown
+    uint8_t  Debounce;              // debounce time, in ms
 #if LOGO_LED_ENABLE
     uint8_t Logo_On_Off;            // logo light on/off
     uint8_t Logo_Mode;              // logo light mode
@@ -232,6 +264,9 @@ typedef struct {
 #endif
 } Keyboard_Info_t;
 extern Keyboard_Info_t Keyboard_Info;
+#if LOGO_LED_ENABLE && !SIDE_LED_ENABLE
+_Static_assert(sizeof(Keyboard_Info_t) == 24, "Keyboard_Info_t must keep the firmware 0.1.5 layout");
+#endif
 
 typedef struct {
     uint8_t System_Work_Status;     // system status
@@ -249,12 +284,19 @@ bool     Key_Ble_2_Status;
 bool     Key_Ble_3_Status;
 bool     Key_Fn_Status;
 bool     Key_Reset_Status;
-bool     Keyboard_Reset;
+bool     Key_Debounce_Status;
+bool     Key_Sleep_Time_Status;
+bool     Func_Key_Long_Press;
 uint8_t  Systick_6ms_Count;
 uint8_t  Systick_10ms_Count;
 uint16_t Systick_Interval_Count;
 uint16_t Time_3s_Count;
 uint16_t Func_Time_3s_Count;
+
+/************************Debounce**************************/
+/************************Debounce**************************/
+/************************Debounce**************************/
+uint8_t Debounce_Time;                  // used by rd75_debounce.c
 
 /************************Data queue**************************/
 /************************Data queue**************************/
@@ -301,6 +343,10 @@ bool     Init_Spi_Power_Up;
 uint8_t  Init_Spi_100ms_Delay;
 bool     Ble_Name_Spi_Send;
 uint8_t  Ble_Name_Spi_Count;
+bool     Sleep_Time_Spi_Send;
+bool     Rf_Timer_2_Spi_Send;
+bool     Spi_Sync_Request;
+uint8_t  Spi_Ble_Send_Count;
 
 const uint32_t g_es_dma_ch2pri_cfg;
 const uint32_t g_es_dma_ch2alt_cfg;
@@ -327,6 +373,7 @@ void es_send_mouse(report_mouse_t *report);
 void es_send_extra(report_extra_t *report);
 void Mode_Synchronization(void);
 void Ble_Name_Synchronization(void);
+void Spi_Synchronization(void);
 void User_bluetooth_send_keyboard(uint8_t *report, uint32_t len);
 
 /**************************System functions****************************/
@@ -355,6 +402,9 @@ void es_mcu_reset(void);
 void bootloader_jump(void);
 void mcu_reset(void);
 void User_Keyboard_Reset(void);
+void User_Debounce_Toggle(void);
+void User_Sleep_Time_Next(void);
+void User_Func_Key_Long_Press(void);
 void Save_Flash_Set(void);
 void User_Systime_Init(void);
 void User_Systime_Deinit(void);
@@ -454,8 +504,11 @@ uint8_t  Systick_Led_Count;
 // uint8_t  Point_Flash_Count;		   // -
 uint8_t  Led_Point_Count;
 uint8_t  Mac_Win_Point_Count;
+uint8_t  Debounce_Point_Count;
+uint8_t  Sleep_Time_Point_Count;
 bool     Led_Flash_Busy;
 bool     Led_Off_Start;
+bool     Led_Power_Off;                 // nothing lit: keep the LED supply off
 bool     Led_Power_Up;
 uint16_t Led_Power_Up_Delay;
 bool     Usb_If_Ok_Led;
@@ -474,6 +527,7 @@ void  rgb_matrix_driver_set_color(int index, uint8_t r, uint8_t g, uint8_t b);
 void  rgb_matrix_driver_set_color_all(uint8_t r, uint8_t g, uint8_t b);
 const rgb_matrix_driver_t rgb_matrix_driver;
 
+void Led_All_Off_Show(void);
 void Led_Power_Low_Show(void);
 void Led_Rf_Mode_Show(void);
 void Led_Batt_Number_Show(void);

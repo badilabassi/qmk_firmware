@@ -5,7 +5,7 @@
     "url": "https://github.com/womierkeyboard/RD75",
     "board": "FS026",
     "build": {
-        "debounce_type": "asym_eager_defer_pk"
+        "debounce_type": "custom"
     },
     "bluetooth": {
         "driver": "custom"
@@ -21,7 +21,7 @@
     "usb": {
         "vid": "0x36B0",
         "pid": "0x3003",
-        "device_version": "0.1.2",
+        "device_version": "0.1.5",
         "no_startup_check": true
     },
     "matrix_pins": {
