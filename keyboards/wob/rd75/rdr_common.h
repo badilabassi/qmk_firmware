@@ -58,8 +58,6 @@
 #define USER_BLE2_WRITE_NAME    0X13
 #define USER_BLE3_WRITE_NAME    0X14
 
-#define USER_SLEEP_TIME_DATA	0X15            // sleep timeout in seconds, 4 bytes big-endian
-#define USER_RF_TIMER_2_DATA	0X16            // second radio timer, 4 bytes big-endian
 
 #define USER_KEY_BYTE_LENGTH	0X08
 #define USER_KEY_BIT_LENGTH		0X0F
@@ -343,8 +341,6 @@ bool     Init_Spi_Power_Up;
 uint8_t  Init_Spi_100ms_Delay;
 bool     Ble_Name_Spi_Send;
 uint8_t  Ble_Name_Spi_Count;
-bool     Sleep_Time_Spi_Send;
-bool     Rf_Timer_2_Spi_Send;
 bool     Spi_Sync_Request;
 uint8_t  Spi_Ble_Send_Count;
 

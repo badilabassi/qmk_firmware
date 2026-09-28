@@ -337,8 +337,6 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {   // Called for 
         case QMK_RF_TIMER_2_ADD: {
             if (!record->event.pressed) {
                 Keyboard_Info.Rf_Timer_2 += 15;
-                Spi_Send_Command(USER_RF_TIMER_2_DATA);
-                Rf_Timer_2_Spi_Send = false;
                 Save_Flash_Set();
             }
         } return true;

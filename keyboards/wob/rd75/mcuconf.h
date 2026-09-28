@@ -17,7 +17,6 @@
 
 #pragma once
 
-#define ES32_USB_USE_USB0 TURE
+#define ES32_USB_USE_USB0 TRUE
 
 //#include_next <mcuconf.h>
-

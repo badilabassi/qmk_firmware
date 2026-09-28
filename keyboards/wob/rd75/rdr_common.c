@@ -13,9 +13,11 @@
  * the vendor's code; the rest are equivalent. See PARITY.md.
  *
  * Updated to the behaviour of Womier's firmware 0.1.5 (reconstructed from its
- * binary): selectable sleep timeout and debounce, an all-lighting toggle, the
- * Caps Lock indicator on the logo, LED supply cut when nothing is lit, and the
- * 24-byte settings layout.
+ * binary): selectable debounce, an all-lighting toggle, the Caps Lock indicator
+ * on the logo, LED supply cut when nothing is lit, and the 24-byte settings
+ * layout. The 0.1.5 radio-timer protocol is intentionally disabled because the
+ * production RD75 radio firmware does not support it and stops carrying HID
+ * reports when either timer command is synchronized.
  */
 
 #include "rdr_common.h"
@@ -90,8 +92,6 @@ bool             Init_Spi_Power_Up    = true;
 uint8_t          Init_Spi_100ms_Delay = 0;
 bool             Ble_Name_Spi_Send    = false;
 uint8_t          Ble_Name_Spi_Count   = 1;
-bool             Sleep_Time_Spi_Send  = false;
-bool             Rf_Timer_2_Spi_Send  = false;
 bool             Spi_Sync_Request     = false;
 uint8_t          Spi_Ble_Send_Count   = 0;
 
@@ -266,8 +266,6 @@ void Emi_Init(void) {
     Mode_Synchronization_Signal          = false;
     Led_Rf_Pair_Flg                      = false;
     Ble_Name_Spi_Send                    = false;
-    Sleep_Time_Spi_Send                  = false;
-    Rf_Timer_2_Spi_Send                  = false;
 }
 
 void Emi_Read_Data(uint8_t *User_Data, uint8_t User_Length) {
@@ -453,12 +451,6 @@ void Spi_Send_Command(uint8_t Command) {
             g_es_spi_tx_buf[5] = strlen(USER_BLE3_NAME);
             uint8_t len        = strlen(USER_BLE3_NAME);
             memcpy(&g_es_spi_tx_buf[6], USER_BLE3_NAME, len);
-        } else if ((Command == USER_SLEEP_TIME_DATA) || (Command == USER_RF_TIMER_2_DATA)) {
-            uint32_t value     = (Command == USER_SLEEP_TIME_DATA) ? Keyboard_Info.Sleep_Time : Keyboard_Info.Rf_Timer_2;
-            g_es_spi_tx_buf[3] = value >> 24;
-            g_es_spi_tx_buf[4] = value >> 16;
-            g_es_spi_tx_buf[5] = value >> 8;
-            g_es_spi_tx_buf[6] = value;
         }
 
         es_spi_send_recv_by_dma(USER_KEYBOARD_LENGTH, g_es_spi_rx_buf, g_es_spi_tx_buf);
@@ -544,16 +536,6 @@ void Get_Spi_Return_Data(uint8_t *Data) {
             }
         }
 
-        // The radio reports its copies of the two timers; resend ours if they differ.
-        uint32_t Rf_Sleep_Time = ((uint32_t)Data[11] << 24) | ((uint32_t)Data[12] << 16) | ((uint32_t)Data[13] << 8) | Data[14];
-        if (Rf_Sleep_Time != Keyboard_Info.Sleep_Time) {
-            Sleep_Time_Spi_Send = true;
-        }
-
-        uint32_t Rf_Timer_2 = ((uint32_t)Data[15] << 24) | ((uint32_t)Data[16] << 16) | ((uint32_t)Data[17] << 8) | Data[18];
-        if (Rf_Timer_2 != Keyboard_Info.Rf_Timer_2) {
-            Rf_Timer_2_Spi_Send = true;
-        }
     } else if (Data[2] == USER_KEYBOARD_SLEEP) {
         if (Keyboard_Status.System_Work_Status && (Data[3] == USER_SLEEP_PASS)) {
             if (Keyboard_Info.Key_Mode != QMK_USB_MODE) {
@@ -684,15 +666,6 @@ void Spi_Synchronization(void) {
         Ble_Name_Synchronization();
     }
 
-    if (Sleep_Time_Spi_Send) {
-        Spi_Send_Command(USER_SLEEP_TIME_DATA);
-        Sleep_Time_Spi_Send = false;
-    }
-
-    if (Rf_Timer_2_Spi_Send) {
-        Spi_Send_Command(USER_RF_TIMER_2_DATA);
-        Rf_Timer_2_Spi_Send = false;
-    }
 }
 
 // Queues a HID report for the radio: [command, length, report type, report...].
@@ -831,8 +804,6 @@ void User_Sleep_Time_Next(void) {
         default:               Keyboard_Info.Sleep_Time = SLEEP_TIME_3MIN;  break;
     }
 
-    Spi_Send_Command(USER_SLEEP_TIME_DATA);
-    Sleep_Time_Spi_Send    = false;
     Sleep_Time_Point_Count = 3;
     Systick_Led_Count      = 0;
     Save_Flash_Set();

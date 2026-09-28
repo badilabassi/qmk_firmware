@@ -22,10 +22,14 @@ See the [build environment setup](https://docs.qmk.fm/#/getting_started_build_to
 As in Womier's firmware 0.1.5:
 
 * **Fn + Del**: all lighting (keys and logo) on/off
-* **Fn + T**, held 3 s: sleep timeout 1 → 3 → 10 → 30 min; the logo flashes red, green, blue or white
 * **Fn + H**, held 3 s: debounce 5 ms ↔ 2 ms; the logo flashes green (5 ms) or red (2 ms)
 * **Fn + End** (`EE_CLR`), held 3 s: factory reset
 * The logo lights white while Caps Lock is on
+
+The firmware 0.1.5 radio-timer commands (`0x15` and `0x16`) are not sent. The
+production RD75 radio firmware does not support either command; automatically
+synchronizing them prevents both Bluetooth and 2.4 GHz HID reports. Fn+T
+therefore retains its normal `T` behavior on the function layers.
 
 ## Bootloader
 

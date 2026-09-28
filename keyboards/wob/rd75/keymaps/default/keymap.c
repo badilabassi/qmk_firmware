@@ -36,7 +36,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [2] = LAYOUT_tkl_ansi(
         KC_ESC,  KC_BRID, KC_BRIU, KC_WHOM, KC_MAIL, KC_CALC,  KC_MSEL, KC_MPRV, KC_MPLY, KC_MNXT, KC_MUTE,  KC_VOLD,  KC_VOLU,  LED_TOG, KC_HOME, KC_MUTE,
         KC_GRV,  MD_BLE1, MD_BLE2, MD_BLE3, MD_24G,  MD_USB,   KC_6,    KC_7,    KC_8,    KC_9,    KC_0,     LOGO_VAD, LOGO_VAI, QK_BAT,  EE_CLR,
-        KC_TAB,  KC_Q,    KC_W,    KC_E,    KC_R,    SLP_TIM,  KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     LOGO_SPD, LOGO_SPI, RM_NEXT, RM_SATU,
+        KC_TAB,  KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,     KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     LOGO_SPD, LOGO_SPI, RM_NEXT, RM_SATU,
         KC_CAPS, TO(0),   TO(1),   KC_D,    KC_F,    KC_G,     DEB_TOG, KC_J,    KC_K,    KC_L,    LOGO_SAD, LOGO_SAI, RM_NEXT,  RM_HUEU, RM_SATD,
         KC_LSFT,          KC_Z,    KC_X,    KC_C,    KC_V,     KC_B,    SIX_N,   KC_M,    KC_COMM, KC_DOT,   KC_SLSH,  LOGO_HUI, RM_VALU,
         TEST_CL, QK_WLO,  KC_LALT,                   LOGO_MOD,                            KC_NO,   KC_RCTL,            RM_SPDD,  RM_VALD, RM_SPDU
@@ -44,7 +44,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [3] = LAYOUT_tkl_ansi(
         KC_ESC,  KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,    KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10,   KC_F11,   KC_F12,   LED_TOG, KC_HOME, KC_MUTE,
         KC_GRV,  MD_BLE1, MD_BLE2, MD_BLE3, MD_24G,  MD_USB,   KC_6,    KC_7,    KC_8,    KC_9,    KC_0,     LOGO_VAD, LOGO_VAI, QK_BAT,  EE_CLR,
-        KC_TAB,  KC_Q,    KC_W,    KC_E,    KC_R,    SLP_TIM,  KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     LOGO_SPD, LOGO_SPI, RM_NEXT, RM_SATU,
+        KC_TAB,  KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,     KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,     LOGO_SPD, LOGO_SPI, RM_NEXT, RM_SATU,
         KC_CAPS, TO(0),   TO(1),   KC_D,    KC_F,    KC_G,     DEB_TOG, KC_J,    KC_K,    KC_L,    LOGO_SAD, LOGO_SAI, RM_NEXT,  RM_HUEU, RM_SATD,
         KC_LSFT,          KC_Z,    KC_X,    KC_C,    KC_V,     KC_B,    SIX_N,   KC_M,    KC_COMM, KC_DOT,   KC_SLSH,  LOGO_HUI, RM_VALU,
         TEST_CL, QK_WLO,  KC_LGUI,                   LOGO_MOD,                            KC_NO,   KC_RCTL,            RM_SPDD,  RM_VALD, RM_SPDU
