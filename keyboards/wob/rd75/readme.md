@@ -28,8 +28,14 @@ As in Womier's firmware 0.1.5:
 
 The firmware 0.1.5 radio-timer commands (`0x15` and `0x16`) are not sent. The
 production RD75 radio firmware does not support either command; automatically
-synchronizing them prevents both Bluetooth and 2.4 GHz HID reports. Fn+T
-therefore retains its normal `T` behavior on the function layers.
+synchronizing them prevents both Bluetooth and 2.4 GHz HID reports. Womier's own
+0.1.5 and 0.1.6 images fail the same way on these radios. Fn+T therefore retains
+its normal `T` behavior on the function layers.
+
+The Womier bootloader runs the application from 0x8000 and the EEPROM emulation
+starts at 0x1BE00, so firmware images are limited to 81,408 bytes.
+`ld/FS026.ld` enforces this at link time; a larger image would overlap the
+EEPROM pages and leave the keyboard unresponsive.
 
 ## Bootloader
 
