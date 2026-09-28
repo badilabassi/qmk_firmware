@@ -15,7 +15,7 @@
 #include "debounce.h"
 #include "timer.h"
 #include "util.h"
-#include "rdr_common.h"
+#include "rdmctmzt_common.h"
 
 // Maximum debounce: 127ms
 #define DEBOUNCE_MAX 127
